@@ -17,4 +17,5 @@ export interface Response {
   is_ai: boolean;
   author_name: string;
   created_at: string;
+  parent_response_id: string | null;
 }

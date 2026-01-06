@@ -20,10 +20,10 @@ const Header = () => {
             </div>
             <div>
               <h1 className="font-display text-xl font-bold text-foreground">
-                IdeaDebate
+                Continue Feedback
               </h1>
               <p className="text-xs text-muted-foreground">
-                Donde las ideas cobran vida
+                El debate continuo de ideas
               </p>
             </div>
           </div>
