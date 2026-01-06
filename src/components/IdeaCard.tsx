@@ -32,9 +32,10 @@ const IdeaCard = ({ idea, index }: IdeaCardProps) => {
 
       if (error) throw error;
       
-      const typedResponses: Response[] = (data || []).map(r => ({
+      const typedResponses: Response[] = (data || []).map((r: any) => ({
         ...r,
-        viewpoint: r.viewpoint as ViewpointType
+        viewpoint: r.viewpoint as ViewpointType,
+        parent_response_id: r.parent_response_id ?? null
       }));
       
       setResponses(typedResponses);
@@ -65,7 +66,8 @@ const IdeaCard = ({ idea, index }: IdeaCardProps) => {
         (payload) => {
           const newResponse = {
             ...payload.new,
-            viewpoint: payload.new.viewpoint as ViewpointType
+            viewpoint: payload.new.viewpoint as ViewpointType,
+            parent_response_id: payload.new.parent_response_id ?? null
           } as Response;
           setResponses((prev) => [...prev, newResponse]);
         }
@@ -197,8 +199,14 @@ const IdeaCard = ({ idea, index }: IdeaCardProps) => {
               </div>
             ) : responses.length > 0 ? (
               <div className="space-y-3">
-                {responses.map((response, idx) => (
-                  <ResponseCard key={response.id} response={response} index={idx} />
+                {responses.filter(r => !r.parent_response_id).map((response, idx) => (
+                  <ResponseCard 
+                    key={response.id} 
+                    response={response} 
+                    index={idx}
+                    allResponses={responses}
+                    onReplyAdded={fetchResponses}
+                  />
                 ))}
               </div>
             ) : (

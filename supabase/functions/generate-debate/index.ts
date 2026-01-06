@@ -12,10 +12,14 @@ serve(async (req) => {
   }
 
   try {
-    const { ideaId, ideaTitle, ideaContent } = await req.json();
+    const { ideaId, ideaTitle, ideaContent, parentResponseId, parentContent, parentViewpoint, isReply } = await req.json();
     
-    if (!ideaId || !ideaTitle || !ideaContent) {
-      throw new Error("Missing required fields: ideaId, ideaTitle, ideaContent");
+    if (!ideaId) {
+      throw new Error("Missing required field: ideaId");
+    }
+    
+    if (!isReply && (!ideaTitle || !ideaContent)) {
+      throw new Error("Missing required fields: ideaTitle, ideaContent");
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -27,6 +31,66 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Handle reply to a specific response
+    if (isReply && parentResponseId && parentContent) {
+      console.log(`Generating reply for response: ${parentResponseId}`);
+      
+      const oppositeViewpoint = parentViewpoint === 'favor' ? 'contra' : parentViewpoint === 'contra' ? 'favor' : 'neutral';
+      
+      const prompt = parentViewpoint === 'neutral' 
+        ? `Eres un analista que continúa un debate. Responde al siguiente comentario neutral aportando una perspectiva diferente. Sé respetuoso pero incisivo. Responde en español, máximo 100 palabras.`
+        : `Eres un debatedor que está ${oppositeViewpoint === 'favor' ? 'A FAVOR' : 'EN CONTRA'} de la idea original. Responde al siguiente argumento con un contra-argumento sólido. Sé respetuoso pero firme. Responde en español, máximo 100 palabras.`;
+      
+      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: prompt },
+            { role: 'user', content: `Argumento anterior: "${parentContent}"` }
+          ],
+        }),
+      });
+
+      if (!aiResponse.ok) {
+        const errorText = await aiResponse.text();
+        console.error('AI gateway error for reply:', aiResponse.status, errorText);
+        throw new Error(`AI API error: ${aiResponse.status}`);
+      }
+
+      const data = await aiResponse.json();
+      const generatedContent = data.choices?.[0]?.message?.content;
+
+      if (generatedContent) {
+        const { error: insertError } = await supabase
+          .from('responses')
+          .insert({
+            idea_id: ideaId,
+            content: generatedContent,
+            viewpoint: oppositeViewpoint,
+            is_ai: true,
+            author_name: oppositeViewpoint === 'favor' ? 'IA Defensor' : oppositeViewpoint === 'contra' ? 'IA Crítico' : 'IA Analista',
+            parent_response_id: parentResponseId
+          });
+
+        if (insertError) {
+          console.error('Error inserting reply:', insertError);
+          throw insertError;
+        }
+        
+        console.log('Successfully generated reply');
+      }
+
+      return new Response(JSON.stringify({ success: true, type: 'reply' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Handle initial debate generation
     console.log(`Generating debate responses for idea: ${ideaId}`);
 
     const viewpoints = [
